@@ -1,0 +1,339 @@
+<cem_dashboard.html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CEM Dashboard • Single File (Live Google Sheet)</title>
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+  <style>
+    :root{
+      --brand:#e51636; --accent:#ffcf00; --ink:#e7ebf5; --muted:#9aa3b2;
+      --bg1:#0a0e1d; --bg2:#0c1122; --panel:#0f1424; --card:#121a2f; --line:#23304e;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2) 40%,#0a0f21);color:var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+
+    /* Top App Bar */
+    header{position:sticky;top:0;z-index:50;background:rgba(15,20,36,.9);
+      border-bottom:1px solid var(--line);backdrop-filter:saturate(120%) blur(6px)}
+    .wrap{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;gap:12px;align-items:center}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800}
+    .brand .dot{width:10px;height:10px;border-radius:999px;background:var(--accent)}
+    nav{display:flex;gap:8px;margin-left:auto}
+    .tab{border:1px solid var(--line);background:#0e1527;color:var(--muted);
+      padding:8px 12px;border-radius:10px;cursor:pointer;text-decoration:none}
+    .tab.active,.tab:hover{color:var(--ink);border-color:var(--accent)}
+    #lastSync{margin-left:8px;color:var(--muted);font-size:12px}
+
+    main{max-width:1120px;margin:16px auto;padding:0 16px 56px}
+    .hidden{display:none}
+
+    /* Cards / Controls */
+    .card{background:radial-gradient(1200px 600px at -10% -10%,var(--card) 0%,#0d1426 38%,#0a0f20 100%);
+      border:1px solid var(--line);border-radius:16px;padding:14px}
+    .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+    .muted{color:var(--muted)}
+    select,button{background:#0f172b;color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+
+    .kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}
+    @media (min-width:780px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    .kpi{background:#0f172b;border:1px solid var(--line);border-radius:14px;padding:12px}
+    .kpi .label{color:var(--muted);font-size:12px}
+    .kpi .val{font-size:26px;font-weight:800;margin-top:6px}
+
+    /* Badges */
+    .badge{padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:#0e1527;color:var(--muted);
+      cursor:pointer;user-select:none}
+    .badge.active{color:var(--ink);border-color:var(--accent);box-shadow:inset 0 0 0 1px rgba(255,207,0,.35)}
+
+    /* Data table */
+    .tableWrap{position:relative;overflow:auto;max-height:72vh;background:#0f172b;border:1px solid var(--line);
+      border-radius:16px}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    thead th{position:sticky;top:0;z-index:2;background:#0e1527;color:var(--muted);
+      padding:10px;text-align:left;border-bottom:1px solid var(--line);box-shadow:0 2px 0 rgba(35,48,78,.8)}
+    tbody td{padding:10px;border-bottom:1px solid var(--line)}
+    tbody tr:nth-child(odd) td{background:#101731}
+    tbody tr:hover td{background:#0f1b36}
+    .stickyCol{position:sticky;left:0;z-index:1;background:inherit}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="brand"><span class="dot"></span><span>CEM Dashboard</span></div>
+      <nav>
+        <a class="tab active" id="navDashboard" href="#dashboard">Dashboard</a>
+        <a class="tab" id="navData" href="#data">Data</a>
+      </nav>
+      <div id="lastSync">Loading…</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- DASHBOARD VIEW -->
+    <section id="dashboardView" class="card">
+      <div class="row">
+        <label class="muted">Window:</label>
+        <select id="timeframe">
+          <option value="day">Day (today)</option>
+          <option value="week">Week (avg)</option>
+          <option value="month">Month (avg)</option>
+        </select>
+        <span class="muted">Most recent log: <strong id="mostRecent">—</strong></span>
+      </div>
+      <div id="kpis" class="kpis"></div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="row" style="justify-content:space-between">
+          <span class="muted">Trends by metric</span>
+          <div id="metricBadges" class="row"></div>
+          <button id="toggleAll">All</button>
+        </div>
+        <div id="chart" style="height:380px"></div>
+      </div>
+    </section>
+
+    <!-- DATA VIEW -->
+    <section id="dataView" class="hidden">
+      <div class="card" style="margin-bottom:12px">
+        <div class="row">
+          <label class="muted">Show:</label>
+          <select id="dataPeriod">
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+            <option value="all">All Time</option>
+          </select>
+          <span class="muted">Newest → Oldest • Dates show as MM/DD/YYYY</span>
+        </div>
+      </div>
+      <div class="tableWrap">
+        <table id="dataTable">
+          <thead id="dataHead"></thead>
+          <tbody id="dataBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+<script>
+/***** CONSTANTS *****/
+const METRICS = [
+  'OSAT','Order Accuracy','Fast Service','Taste','Temperature',
+  'Interior Cleanliness','Restroom Cleanliness','Exterior Cleanliness','Attentive/Courteous'
+];
+// TODO: replace this with your own published-CSV link
+const SHEET_CSV =
+  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSiifqbovjK8rwFBShoYxhO2KQH6Nh_Zfxdg3nNwC25KzVVFa5naZ70jk5tsDTSzm0dostUgZZnAnBT/pub?output=csv';
+
+const DB = { rows: [] };
+
+/***** HELPERS *****/
+const fmt0 = new Intl.NumberFormat('en-US',{maximumFractionDigits:0});
+const $  = s => document.querySelector(s);
+function toISO(date){ const d=new Date(date.getFullYear(),date.getMonth(),date.getDate()); return d.toISOString().slice(0,10); }
+function toUS(iso){ if(!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso; const [y,m,d]=iso.split('-'); return `${m}/${d}/${y}`; }
+function normalizeToISO(mdy){ const p=String(mdy).trim().split('/'); if(p.length!==3) return mdy; const [m,d,y]=p; return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function groupBy(arr,key){ return arr.reduce((a,x)=>{ (a[x[key]] ||= []).push(x); return a; },{}); }
+function avg(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
+
+/***** DEMO SEED (so page never loads blank) *****/
+function seedDemo(){
+  const out=[]; const today=new Date(); const start=new Date(); start.setDate(today.getDate()-29);
+  for(let t=new Date(start); t<=today; t.setDate(t.getDate()+1)){
+    const iso=toISO(t);
+    for(const m of METRICS){
+      const base=82 + ((m.length*7)%9) - 4; const noise=(Math.random()*10-5);
+      const v=Math.max(60, Math.min(99, Math.round(base+noise)));
+      out.push({date:iso, metric:m, score:v});
+    }
+  }
+  DB.rows = out;
+}
+
+/***** CSV PARSER (robust for quoted values) *****/
+function parseCSVLine(line){
+  const out=[]; let cur='', inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(ch==='"'){
+      if(inQ && line[i+1]==='"'){ cur+='"'; i++; }
+      else inQ=!inQ;
+    } else if(ch===',' && !inQ){ out.push(cur); cur=''; }
+    else cur+=ch;
+  }
+  out.push(cur); return out;
+}
+function wideCSVtoLongRows(csvText){
+  const lines = csvText.trim().split(/\r?\n/);
+  if(lines.length<2) return [];
+  const headers = parseCSVLine(lines[0]).map(h=>h.trim());
+  const metricHeaders = headers.slice(1);
+  const out=[];
+  for(let i=1;i<lines.length;i++){
+    const row=lines[i]; if(!row.trim()) continue;
+    const cells=parseCSVLine(row);
+    const rawDate=(cells[0]||'').trim(); if(!rawDate) continue;
+    const iso = normalizeToISO(rawDate);
+    for(let j=0;j<metricHeaders.length;j++){
+      const metric=metricHeaders[j];
+      const raw=cells[j+1]; if(raw==null||raw==='') continue;
+      const num=Number(raw);
+      if(Number.isFinite(num) && METRICS.includes(metric)) out.push({date:iso, metric, score:num});
+    }
+  }
+  return out;
+}
+async function fetchCSV(url){ const r=await fetch(url,{cache:'no-store'}); if(!r.ok) throw new Error('CSV fetch failed '+r.status); return await r.text(); }
+
+/***** LOAD LIVE SHEET *****/
+async function loadFromSheet(){
+  try{
+    const txt = await fetchCSV(SHEET_CSV);
+    const rows = wideCSVtoLongRows(txt);
+    if(rows.length){
+      DB.rows = rows;
+      document.getElementById('lastSync').textContent = 'Live · ' + new Date().toLocaleString();
+    } else {
+      document.getElementById('lastSync').textContent = 'No rows · check sheet headers / tab';
+    }
+    renderKPIs(); renderChart(); renderTable();
+  }catch(err){
+    console.error('CSV fetch failed:', err);
+    document.getElementById('lastSync').textContent =
+      'Offline · showing demo • ' + (err?.message || String(err));
+  }
+}
+
+/***** TIME WINDOW FILTERS *****/
+function rowsForWindow(tf){
+  const today=new Date(); const todayISO=toISO(today);
+  if(tf==='day') return DB.rows.filter(r=>r.date===todayISO);
+  if(tf==='week'){ const s=new Date(); s.setDate(today.getDate()-6); const sISO=toISO(s); return DB.rows.filter(r=>r.date>=sISO && r.date<=todayISO); }
+  if(tf==='month'){ const first=new Date(today.getFullYear(),today.getMonth(),1); const fISO=toISO(first); return DB.rows.filter(r=>r.date>=fISO && r.date<=todayISO); }
+  return DB.rows;
+}
+
+/***** RENDER: KPIs *****/
+function mostRecentDate(){ if(!DB.rows.length) return null; return DB.rows.map(r=>r.date).sort().slice(-1)[0]; }
+function renderKPIs(){
+  const tf = document.getElementById('timeframe').value;
+  const rows = rowsForWindow(tf);
+  const g = groupBy(rows,'metric');
+  const k = document.getElementById('kpis'); k.innerHTML='';
+  METRICS.forEach(m=>{
+    const arr=(g[m]||[]).map(x=>x.score);
+    const val=tf==='day' ? (arr.length?arr[arr.length-1]:null) : avg(arr);
+    const el=document.createElement('div'); el.className='kpi';
+    el.innerHTML = `<div class="label">${m}</div><div class="val">${val==null?'—':fmt0.format(val)+'%'}</div>`;
+    k.appendChild(el);
+  });
+  const mr=mostRecentDate(); document.getElementById('mostRecent').textContent = mr? toUS(mr) : '—';
+}
+
+/***** RENDER: Chart with metric toggles *****/
+let visible = new Set(METRICS);
+function renderBadges(){
+  const wrap=document.getElementById('metricBadges'); wrap.innerHTML='';
+  METRICS.forEach(m=>{
+    const b=document.createElement('span'); b.className='badge'+(visible.has(m)?' active':''); b.textContent=m;
+    b.onclick=()=>{ visible.has(m)?visible.delete(m):visible.add(m); b.classList.toggle('active'); renderChart(); };
+    wrap.appendChild(b);
+  });
+}
+function renderChart(){
+  const rows=DB.rows.filter(r=>visible.has(r.metric));
+  const byMetricDate={}; for(const r of rows){ (byMetricDate[r.metric] ||= {})[r.date]=r.score; }
+  const dates = Array.from(new Set(rows.map(r=>r.date))).sort();
+  const traces=[];
+  for(const m of METRICS){
+    if(!visible.has(m)) continue;
+    const y=dates.map(d=>byMetricDate[m]?.[d] ?? null);
+    traces.push({name:m,x:dates.map(toUS),y,mode:'lines+markers'});
+  }
+  Plotly.newPlot('chart', traces,
+    {margin:{t:20,r:10,l:45,b:36},yaxis:{range:[50,100],title:'Score (%)'},xaxis:{title:'Date'},legend:{orientation:'h'}},
+    {displayModeBar:false});
+}
+document.getElementById('toggleAll').addEventListener('click',()=>{
+  if(visible.size===METRICS.length) visible.clear(); else visible=new Set(METRICS);
+  renderBadges(); renderChart();
+});
+
+/***** RENDER: Data table (Month / Year / All, newest->oldest, MM/DD/YYYY) *****/
+function renderTable(){
+  const period = document.getElementById('dataPeriod').value; const now=new Date();
+  const monthStart = toISO(new Date(now.getFullYear(), now.getMonth(), 1));
+  const yearStart  = toISO(new Date(now.getFullYear(), 0, 1));
+  let rows = DB.rows.slice();
+  if(period==='month') rows = rows.filter(r=>r.date>=monthStart);
+  else if(period==='year') rows = rows.filter(r=>r.date>=yearStart);
+  const map={}, dset=new Set(); rows.forEach(r=>{ (map[r.date] ||= {})[r.metric]=r.score; dset.add(r.date); });
+  const dates = Array.from(dset).sort().reverse(); // newest first
+
+  // head
+  const head=document.getElementById('dataHead'); head.innerHTML='';
+  const tr=document.createElement('tr');
+  tr.appendChild(Object.assign(document.createElement('th'),{textContent:'Date',className:'stickyCol'}));
+  METRICS.forEach(m=> tr.appendChild(Object.assign(document.createElement('th'),{textContent:m})) );
+  head.appendChild(tr);
+
+  // body
+  const body=document.getElementById('dataBody'); body.innerHTML='';
+  dates.forEach(d=>{
+    const row=document.createElement('tr');
+    const td0=document.createElement('td'); td0.className='stickyCol'; td0.textContent=toUS(d); row.appendChild(td0);
+    const obj=map[d]||{}; METRICS.forEach(m=>{
+      const td=document.createElement('td'); td.textContent = (obj[m]==null?'—':fmt0.format(obj[m])+'%');
+      row.appendChild(td);
+    });
+    body.appendChild(row);
+  });
+}
+
+/***** NAVIGATION *****/
+function setView(v){
+  if(v==='data'){ document.getElementById('dashboardView').classList.add('hidden'); document.getElementById('dataView').classList.remove('hidden'); }
+  else { document.getElementById('dataView').classList.add('hidden'); document.getElementById('dashboardView').classList.remove('hidden'); }
+  document.getElementById('navDashboard').classList.toggle('active', v!=='data');
+  document.getElementById('navData').classList.toggle('active', v==='data');
+}
+function route(){ const h=location.hash.replace('#',''); setView(h==='data'?'data':'dashboard'); }
+document.getElementById('navDashboard').addEventListener('click', e=>{ e.preventDefault(); location.hash='#dashboard'; route(); });
+document.getElementById('navData').addEventListener('click', e=>{ e.preventDefault(); location.hash='#data'; route(); });
+window.addEventListener('hashchange', route);
+
+/***** INIT *****/
+seedDemo();
+renderBadges();
+renderKPIs();
+renderChart();
+renderTable();
+route();
+
+// Live hydrate + periodic refresh
+loadFromSheet();
+setInterval(loadFromSheet, 5*60*1000);
+
+// Respond to controls
+document.getElementById('timeframe').addEventListener('change',()=>{ renderKPIs(); });
+document.getElementById('dataPeriod').addEventListener('change',()=>{ renderTable(); });
+
+/***** LIGHT TESTS (append ?test=1) *****/
+function runTests(){
+  const sample = [
+    'Date,OSAT,Order Accuracy,Fast Service',
+    '8/10/2025,95.2,97.1,90',
+    '08/11/2025,96,98,91.5'
+  ].join('\n');
+  const rows = wideCSVtoLongRows(sample);
+  console.assert(rows.length===6,'Expected 6 rows');
+  console.assert(rows.some(r=>r.date==='2025-08-10' && r.metric==='OSAT' && r.score===95.2),'OSAT row missing');
+  console.assert(rows.some(r=>r.date==='2025-08-11' && r.metric==='Order Accuracy' && r.score===98),'Order Accuracy row missing');
+}
+if(location.search.includes('test=1')) runTests();
+</script>
+</body>
+</html>
