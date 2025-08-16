@@ -315,7 +315,7 @@ route();
 
 // Live hydrate + periodic refresh
 loadFromSheet();
-setInterval(loadFromSheet, 60*1000);
+setInterval(loadFromSheet, 10*1000);
 
 // Respond to controls
 document.getElementById('timeframe').addEventListener('change',()=>{ renderKPIs(); });
