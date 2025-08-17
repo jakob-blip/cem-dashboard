@@ -209,6 +209,7 @@ async function loadFromSheet(){
 
 /***** TIME WINDOW FILTERS *****/
 function rowsForWindow(tf){
+  return (tf === 'month') ? 'month' : 'week';
   const today=new Date(); const todayISO=toISO(today);
   if(tf==='day') return DB.rows.filter(r=>r.date===todayISO);
   if(tf==='week'){ const s=new Date(); s.setDate(today.getDate()-6); const sISO=toISO(s); return DB.rows.filter(r=>r.date>=sISO && r.date<=todayISO); }
@@ -244,15 +245,21 @@ function renderBadges(){
   });
 }
 function renderChart(){
-  const rows=DB.rows.filter(r=>visible.has(r.metric));
-  const byMetricDate={}; for(const r of rows){ (byMetricDate[r.metric] ||= {})[r.date]=r.score; }
-  const dates = Array.from(new Set(rows.map(r=>r.date))).sort();
-  const traces=[];
-  for(const m of METRICS){
-    if(!visible.has(m)) continue;
-    const y=dates.map(d=>byMetricDate[m]?.[d] ?? null);
-    traces.push({name:m,x:dates.map(toUS),y,mode:'lines+markers'});
-  }
+  // Use the timeframe selector but map 'day' -> 'week'
+  const tf = document.getElementById('timeframe').value;
+  const rowsWindow = rowsForWindow(chartWindowFor(tf));
+
+  // from here on, use rowsWindow instead of DB.rows
+  const rows = rowsWindow.filter(r => visible.has(r.metric));
+
+  const byMetricDate = {};
+  for (const r of rows) { (byMetricDate[r.metric] ||= {})[r.date] = r.score; }
+
+  // If you adopted the ISO-date Plotly setup I shared:
+  const dates = Array.from(new Set(rows.map(r => r.date))).sort();
+
+  // ...continue with your traces/layout code...
+}
   Plotly.newPlot('chart', traces,
     {margin:{t:20,r:10,l:45,b:36},yaxis:{range:[50,100],title:'Score (%)'},xaxis:{title:'Date'},legend:{orientation:'h'}},
     {displayModeBar:false});
